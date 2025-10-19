@@ -15,12 +15,6 @@
       "auth": {
         "ecopilotfrontendff4615c6": {}
       },
-      "function": {
-        "S3Trigger36830475": {
-          "deploymentBucketName": "amplify-ecopilotfrontend-dev-93547-deployment",
-          "s3Key": "amplify-builds/S3Trigger36830475-38594a35524f2b437a30-build.zip"
-        }
-      },
       "storage": {
         "RawData": {}
       }

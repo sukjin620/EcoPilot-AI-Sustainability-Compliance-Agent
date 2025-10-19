@@ -1,0 +1,13 @@
+/* App.css - Amplify UI customizations only */
+[data-amplify-authenticator] {
+  --amplify-colors-brand-primary-80: #16a34a;
+  --amplify-colors-brand-primary-90: #15803d;
+  --amplify-components-button-primary-background-color: #16a34a;
+}
+
+amplify-authenticator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
