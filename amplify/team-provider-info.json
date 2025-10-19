@@ -1,0 +1,29 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-ecopilotfrontend-dev-93547-authRole",
+      "UnauthRoleArn": "arn:aws:iam::442168706121:role/amplify-ecopilotfrontend-dev-93547-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::442168706121:role/amplify-ecopilotfrontend-dev-93547-authRole",
+      "Region": "us-west-2",
+      "DeploymentBucketName": "amplify-ecopilotfrontend-dev-93547-deployment",
+      "UnauthRoleName": "amplify-ecopilotfrontend-dev-93547-unauthRole",
+      "StackName": "amplify-ecopilotfrontend-dev-93547",
+      "StackId": "arn:aws:cloudformation:us-west-2:442168706121:stack/amplify-ecopilotfrontend-dev-93547/6db26b20-ad00-11f0-bd0b-069ec7496ac5",
+      "AmplifyAppId": "d2bsspd80ry095"
+    },
+    "categories": {
+      "auth": {
+        "ecopilotfrontendff4615c6": {}
+      },
+      "function": {
+        "S3Trigger36830475": {
+          "deploymentBucketName": "amplify-ecopilotfrontend-dev-93547-deployment",
+          "s3Key": "amplify-builds/S3Trigger36830475-38594a35524f2b437a30-build.zip"
+        }
+      },
+      "storage": {
+        "RawData": {}
+      }
+    }
+  }
+}

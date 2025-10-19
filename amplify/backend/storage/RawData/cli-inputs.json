@@ -1,0 +1,12 @@
+{
+  "resourceName": "RawData",
+  "policyUUID": "84ee63f0",
+  "bucketName": "ecopilot-esg-data",
+  "storageAccess": "auth",
+  "guestAccess": [],
+  "authAccess": [
+    "CREATE_AND_UPDATE",
+    "READ"
+  ],
+  "groupAccess": {}
+}
