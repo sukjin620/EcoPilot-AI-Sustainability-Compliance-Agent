@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef  } from 'react';
 import './App.css';
+import './index.css';
 import { Upload, FileText, AlertCircle, CheckCircle, TrendingUp, Activity, BarChart3, RefreshCw, Leaf, LogOut } from 'lucide-react';
 import { Amplify } from 'aws-amplify';
 import { uploadData } from 'aws-amplify/storage';
-import { get, post } from 'aws-amplify/api';
+import { get } from 'aws-amplify/api';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import awsExports from './aws-exports';
@@ -20,6 +21,7 @@ function EcoPilotDashboard({ signOut, user }) {
   const [selectedAssessment, setSelectedAssessment] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const isFetchingRef = useRef(false);
 
   // Upload file to S3 using Amplify Storage
   const uploadFileToS3 = async (file) => {
@@ -41,7 +43,8 @@ function EcoPilotDashboard({ signOut, user }) {
       console.log('Upload succeeded:', result);
       
       return {
-        fileId: `${result.path}_${new Date().toISOString()}`,
+        fileId: result.path,
+        fileName: file.name,
         bucket: awsExports.aws_user_files_s3_bucket,
         key: result.path,
         status: 'uploaded'
@@ -58,8 +61,6 @@ function EcoPilotDashboard({ signOut, user }) {
     setError(null);
     
     try {
-      console.log('Fetching assessments from API...');
-      
       const restOperation = get({
         apiName: 'ecopilotAPI',
         path: '/assessments'
@@ -68,92 +69,183 @@ function EcoPilotDashboard({ signOut, user }) {
       const response = await restOperation.response;
       const data = await response.body.json();
       
-      console.log('API Response:', data);
+      let assessmentsList = [];
       
       if (data.items && Array.isArray(data.items)) {
-        setAssessments(data.items);
-        console.log(`Loaded ${data.items.length} assessments`);
-      } else {
-        console.warn('No items found in response');
-        setAssessments([]);
+        assessmentsList = data.items;
+      } else if (Array.isArray(data)) {
+        assessmentsList = data;
+      } else if (data.Items && Array.isArray(data.Items)) {
+        assessmentsList = data.Items;
       }
+      
+      setAssessments(assessmentsList);
+      
     } catch (err) {
       console.error('Error fetching assessments:', err);
-      setError('Failed to load assessments. Using demo data.');
-      
-      // Fallback to demo data
-      const demoAssessments = [
-        {
-          assessment_id: 'demo_001',
-          file_id: 'demo_file',
-          timestamp: new Date().toISOString(),
-          overall_status: 'at_risk',
-          compliance_score: 75,
-          data_quality_score: 88,
-          total_violations: 2,
-          critical_violations: 0,
-          source_file: 'demo_data.csv',
-          assessment_data: {
-            violations: [
-              {
-                category: 'energy_efficiency',
-                severity: 'medium',
-                gap_description: 'Renewable energy percentage below target',
-                actual_value: 0.25,
-                threshold_value: 0.30,
-                deviation_percentage: 16.7,
-                standard: 'ISO 50001',
-                recommendation: 'Increase renewable energy procurement to meet compliance targets',
-                timeline: '90_days',
-                regulation_reference: 'EU Energy Efficiency Directive'
-              }
-            ],
-            missing_metrics: ['water_usage', 'biodiversity_impact'],
-            strengths: ['Energy monitoring system active', 'Regular reporting in place'],
-            next_steps: [
-              'Upload actual ESG data to see real compliance analysis',
-              'Review energy procurement contracts',
-              'Implement additional metrics tracking'
-            ]
-          }
-        }
-      ];
-      setAssessments(demoAssessments);
+      setError('Failed to load assessments: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Trigger compliance check via API
-  const triggerComplianceCheck = async (fileId) => {
-    try {
-      console.log('Triggering compliance check for:', fileId);
+  // Add polling function
+  const pollForAssessment = async (fileId, maxAttempts = 20, interval = 3000) => {
+    console.log(`🔍 Starting to poll for: ${fileId}`);
+    
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, interval));
       
-      const restOperation = post({
-        apiName: 'ecopilotAPI',
-        path: '/assessments',
-        options: {
-          body: {
-            file_id: fileId,
-            assessment_type: 'full'
+      try {
+        const restOperation = get({
+          apiName: 'ecopilotAPI',
+          path: '/assessments'
+        });
+        
+        const response = await restOperation.response;
+        const data = await response.body.json();
+      
+        
+        if (data.items && Array.isArray(data.items)) {
+          console.log(`Found ${data.items.length} assessments in database`);
+          
+          // Log all file_ids to see what we're comparing
+          data.items.forEach((item, idx) => {
+            console.log(`  [${idx}] file_id: "${item.file_id}", source_file: "${item.source_file}"`);
+          });
+          
+          // Try multiple matching strategies
+          const assessment = data.items.find(a => {
+            const matches = 
+              a.file_id === fileId || 
+              a.file_id?.includes(fileId) ||
+              fileId.includes(a.file_id) ||
+              a.source_file === fileId.split('/').pop() ||
+              a.file_id === fileId.split('/').pop();
+            
+            if (matches) {
+              console.log(`✅ MATCH FOUND with assessment:`, a);
+            }
+            return matches;
+          });
+          
+          if (assessment) {
+            return assessment;
+          } else {
+            console.log('❌ No matching assessment found yet');
           }
+        } else {
+          console.log('⚠️ No items in response or invalid format');
         }
-      });
+        
+      } catch (err) {
+        console.error('❌ Polling error:', err);
+      }
+    }
+    
+    throw new Error('Polling timeout');
+  };
+
+  // Update handleFiles function
+  const handleFiles = async (files) => {
+    const file = files[0];
+    
+    // Validate file type
+    const allowedTypes = ['.csv', '.json', '.pdf'];
+    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+    
+    if (!allowedTypes.includes(fileExtension)) {
+      alert(`Invalid file type. Please upload ${allowedTypes.join(', ')} files only.`);
+      return;
+    }
+    
+    setSelectedFile(file);
+    setUploading(true);
+    setError(null);
+
+    try {
+      // Upload to S3 
+      console.log('Uploading file to S3:', file.name);
+      const result = await uploadFileToS3(file);
+      console.log('S3 upload complete:', result);
       
-      const response = await restOperation.response;
-      const data = await response.body.json();
+      // Add to uploaded files list
+      const newFile = {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        uploadTime: new Date().toISOString(),
+        fileId: result.fileId,
+        status: 'processing'
+      };
       
-      console.log('Compliance check response:', data);
-      return data;
-    } catch (err) {
-      console.error('Error triggering compliance check:', err);
-      throw err;
+      setUploadedFiles([newFile, ...uploadedFiles]);
+      setUploading(false);
+
+        // Determine file size category
+      const sizeInMB = file.size / (1024 * 1024);
+      const isLargeFile = sizeInMB > 1; // Files over 1MB are "large"
+      
+      const estimatedTime = isLargeFile ? '2-3 minutes' : '60 seconds';
+      
+      alert(`✅ File uploaded successfully!\n\n` +
+            `📊 File size: ${formatFileSize(file.size)}\n` +
+            `⏱️ Estimated processing time: ${estimatedTime}\n\n` +
+            `🤖 AI agents are processing your data:\n` +
+            `1. Data Processor extracting metrics\n` +
+            `2. Compliance Agent analyzing standards\n\n` +
+            `You can check the Dashboard tab anytime - results will appear when ready.`);
+      
+      // Start polling with longer timeout for large files
+      const maxAttempts = isLargeFile ? 60 : 40; // Up to 5 minutes for large files
+      
+      // Poll for results (non-blocking)
+      pollForAssessment(result.fileId, maxAttempts, 3000)
+        .then(assessment => {
+          console.log('Processing complete!', assessment);
+          
+          setUploadedFiles(prev => 
+            prev.map(f => 
+              f.fileId === result.fileId 
+                ? { ...f, status: 'completed' }
+                : f
+            )
+          );
+          
+          if (activeTab === 'dashboard') {
+            fetchAssessments();
+          }
+          
+          alert('✅ Compliance analysis complete! Check the Dashboard.');
+        })
+        .catch(err => {
+          console.error('Polling timeout:', err);
+          
+          setUploadedFiles(prev => 
+            prev.map(f => 
+              f.fileId === result.fileId 
+                ? { ...f, status: 'check_dashboard' }
+                : f
+            )
+          );
+
+          console.log(`Processing ${file.name} is taking longer. Results will appear in Dashboard when ready.`);
+        });
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploading(false);
+      setError('Upload failed: ' + error.message);
+      alert('❌ Upload failed: ' + error.message);
     }
   };
 
   useEffect(() => {
-    if (activeTab === 'dashboard') {
-      fetchAssessments();
+    if (activeTab === 'dashboard' && !isFetchingRef.current) {
+      isFetchingRef.current = true;
+      fetchAssessments().finally(() => {
+        isFetchingRef.current = false;
+      });
     }
   }, [activeTab]);
 
@@ -183,51 +275,19 @@ function EcoPilotDashboard({ signOut, user }) {
     }
   };
 
-  const handleFiles = async (files) => {
-    const file = files[0];
-    
-    // Validate file type
-    const allowedTypes = ['.csv', '.json', '.pdf'];
-    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-    
-    if (!allowedTypes.includes(fileExtension)) {
-      alert(`Invalid file type. Please upload ${allowedTypes.join(', ')} files only.`);
-      return;
-    }
-    
-    setSelectedFile(file);
-    setUploading(true);
-    setError(null);
-
-    try {
-      // Upload to S3
-      const result = await uploadFileToS3(file);
-      
-      // Add to uploaded files list
-      const newFile = {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadTime: new Date().toISOString(),
-        fileId: result.fileId,
-        status: 'processing'
-      };
-      
-      setUploadedFiles([newFile, ...uploadedFiles]);
-      setUploading(false);
-      
-      alert('✅ File uploaded successfully! Your data is being processed by our AI agents. Check the dashboard in a few moments.');
-      
-      // Note: The data processor Lambda will automatically trigger via S3 event
-      // Then the compliance agent will be triggered via DynamoDB Stream
-      
-    } catch (error) {
-      console.error('Upload error:', error);
-      setUploading(false);
-      setError('Upload failed: ' + error.message);
-      alert('❌ Upload failed: ' + error.message);
+  const getFileStatusDisplay = (status) => {
+    switch (status) {
+      case 'processing':
+        return { text: 'Processing...', class: 'bg-blue-100 text-blue-700 animate-pulse' };
+      case 'completed':
+        return { text: 'Completed', class: 'bg-green-100 text-green-700' };
+      case 'check_dashboard':
+        return { text: 'Check Dashboard', class: 'bg-yellow-100 text-yellow-700' };
+      default:
+        return { text: status, class: 'bg-gray-100 text-gray-700' };
     }
   };
+
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -303,6 +363,7 @@ function EcoPilotDashboard({ signOut, user }) {
                   <LogOut className="w-4 h-4 inline mr-2" />
                   Sign Out
                 </button>
+    
               </div>
             </div>
           </div>
@@ -378,7 +439,9 @@ function EcoPilotDashboard({ signOut, user }) {
                 <div className="mt-8">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Uploads</h3>
                   <div className="space-y-3">
-                    {uploadedFiles.map((file, idx) => (
+                    {uploadedFiles.map((file, idx) => {
+                      const statusInfo = getFileStatusDisplay(file.status);
+                      return(
                       <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <div className="flex items-center space-x-3">
                           <FileText className="w-5 h-5 text-gray-500" />
@@ -390,10 +453,11 @@ function EcoPilotDashboard({ signOut, user }) {
                           </div>
                         </div>
                         <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full font-medium">
-                          {file.status}
+                          {statusInfo.text}
                         </span>
                       </div>
-                    ))}
+                    );
+                })}
                   </div>
                 </div>
               )}
