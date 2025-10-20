@@ -14,7 +14,6 @@ Amplify.configure(awsExports);
 function EcoPilotDashboard({ signOut, user }) {
   const [activeTab, setActiveTab] = useState('upload');
   const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [assessments, setAssessments] = useState([]);
@@ -159,7 +158,6 @@ function EcoPilotDashboard({ signOut, user }) {
       return;
     }
     
-    setSelectedFile(file);
     setUploading(true);
     setError(null);
 
