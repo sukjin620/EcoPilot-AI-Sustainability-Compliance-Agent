@@ -61,7 +61,7 @@ function EcoPilotDashboard({ signOut, user }) {
     
     try {
       const restOperation = get({
-        apiName: 'ecopilotAPI',
+        apiName: 'ecopilot-api',
         path: '/assessments'
       });
       
@@ -97,7 +97,7 @@ function EcoPilotDashboard({ signOut, user }) {
       
       try {
         const restOperation = get({
-          apiName: 'ecopilotAPI',
+          apiName: 'ecopilot-api',
           path: '/assessments'
         });
         
