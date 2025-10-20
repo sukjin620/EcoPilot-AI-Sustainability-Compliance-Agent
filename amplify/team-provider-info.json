@@ -17,6 +17,12 @@
       },
       "storage": {
         "RawData": {}
+      },
+      "hosting": {
+        "amplifyhosting": {
+          "appId": "d2bsspd80ry095",
+          "type": "manual"
+        }
       }
     }
   }
